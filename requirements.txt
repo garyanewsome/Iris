@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+diffusers
+transformers
+accelerate
+safetensors
+pillow
