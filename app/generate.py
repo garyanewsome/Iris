@@ -1,3 +1,4 @@
+import logging
 import re
 import threading
 import time
@@ -8,6 +9,14 @@ import torch
 from diffusers import StableDiffusionXLPipeline
 
 from app.config import DEVICE, IDLE_UNLOAD_SECONDS, IMAGES_DIR, MODEL_ID
+
+logger = logging.getLogger("iris")
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
 
 _pipeline = None
 _last_used = 0.0
@@ -35,6 +44,7 @@ def generate_image(prompt: str, conversation_id: str | None = None) -> str:
     with _lock:
         if _pipeline is None:
             _pipeline = _load_pipeline()
+            logger.info("SDXL pipeline loaded")
         image = _pipeline(prompt).images[0]
         _last_used = time.time()
 
@@ -53,13 +63,20 @@ def _unload_if_idle() -> None:
         if _pipeline is not None and (time.time() - _last_used) > IDLE_UNLOAD_SECONDS:
             del _pipeline
             _pipeline = None
-            torch.cuda.empty_cache()
+            try:
+                torch.cuda.empty_cache()
+            except Exception:
+                logger.exception("torch.cuda.empty_cache() failed during idle unload")
+            logger.info("SDXL pipeline unloaded after %ds idle", IDLE_UNLOAD_SECONDS)
 
 
 def _idle_unload_loop() -> None:
     while True:
         time.sleep(30)
-        _unload_if_idle()
+        try:
+            _unload_if_idle()
+        except Exception:
+            logger.exception("Idle-unload check failed")
 
 
 threading.Thread(target=_idle_unload_loop, daemon=True).start()
