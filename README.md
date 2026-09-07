@@ -23,6 +23,8 @@ sudo systemctl status iris
 sudo systemctl restart iris
 ```
 
+To redeploy after a code change: `./deploy.sh` — pulls, reinstalls dependencies, restarts the service.
+
 ## Setup
 
 Needs Python 3.12 specifically (the OS default, 3.14, is too new for PyTorch's published wheels):
