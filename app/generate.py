@@ -32,7 +32,16 @@ _SAFE_FOLDER = re.compile(r"^[A-Za-z0-9_-]+$")
 def _load_pipeline():
     """SDXL's pipeline has no safety_checker constructor arg (unlike
     SD1.5's pipeline) — omitted rather than guessed at."""
-    return StableDiffusionXLPipeline.from_pretrained(MODEL_ID, dtype=torch.float16).to(DEVICE)
+    pipeline = StableDiffusionXLPipeline.from_pretrained(MODEL_ID, dtype=torch.float16).to(DEVICE)
+    # This card is right at SDXL's limit — confirmed live: a full pipeline
+    # load peaked at 10.55GB actually allocated, then OOM'd needing just
+    # ~1GB more for the final VAE decode's conv step, on an 11.63GB card
+    # with near-zero margin. VAE slicing decodes in slices instead of the
+    # full latent at once, cutting that step's peak memory substantially
+    # at a small latency cost — the standard fix for exactly this failure
+    # mode, not a broader accuracy/quality tradeoff.
+    pipeline.enable_vae_slicing()
+    return pipeline
 
 
 def generate_image(prompt: str, conversation_id: str | None = None) -> str:
