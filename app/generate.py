@@ -57,6 +57,23 @@ def generate_image(prompt: str, conversation_id: str | None = None) -> str:
     return f"{folder}/{filename}"
 
 
+def unload_now() -> None:
+    """Explicit, immediate unload — for a caller that knows it needs the GPU
+    back right away (Hermes, right after generate_image, before Ollama
+    reloads its chat model for the follow-up reply) rather than waiting out
+    IDLE_UNLOAD_SECONDS."""
+    global _pipeline
+    with _lock:
+        if _pipeline is not None:
+            del _pipeline
+            _pipeline = None
+            try:
+                torch.cuda.empty_cache()
+            except Exception:
+                logger.exception("torch.cuda.empty_cache() failed during explicit unload")
+            logger.info("SDXL pipeline unloaded on request")
+
+
 def _unload_if_idle() -> None:
     global _pipeline
     with _lock:

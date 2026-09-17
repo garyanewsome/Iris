@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import IMAGES_DIR, PUBLIC_BASE_URL
-from app.generate import generate_image
+from app.generate import generate_image, unload_now
 
 app = FastAPI(title="Iris")
 
@@ -31,3 +31,9 @@ def health():
 def generate(request: GenerateRequest):
     relative_path = generate_image(request.prompt, conversation_id=request.conversation_id)
     return {"image_url": f"{PUBLIC_BASE_URL}/images/{relative_path}"}
+
+
+@app.post("/unload")
+def unload():
+    unload_now()
+    return {"status": "ok"}
