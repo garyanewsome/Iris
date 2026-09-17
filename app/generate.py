@@ -36,16 +36,15 @@ def _load_pipeline():
     # This card is right at SDXL's limit — confirmed live: a full pipeline
     # load peaked at 10.55GB actually allocated, then OOM'd needing just
     # ~1GB more for the final VAE decode's conv step, on an 11.63GB card
-    # with near-zero margin. VAE slicing decodes in slices instead of the
-    # full latent at once, cutting that step's peak memory substantially
-    # at a small latency cost — the standard fix for exactly this failure
-    # mode, not a broader accuracy/quality tradeoff.
-    # StableDiffusionXLPipeline doesn't expose the enable_vae_slicing()
-    # convenience wrapper in this diffusers version (0.40.0) despite
-    # inheriting StableDiffusionMixin — confirmed live via hasattr() against
-    # the actual installed version. The underlying method lives on the VAE
-    # component itself and always exists there regardless.
-    pipeline.vae.enable_slicing()
+    # with near-zero margin. enable_slicing() (splits decoding across a
+    # *batch* of images) did nothing here — we only ever decode one image
+    # per call, so there's no batch dimension to split. enable_tiling()
+    # is the one that actually matters for a single large image: it splits
+    # that one decode spatially into tiles, cutting peak memory for exactly
+    # the conv step that was OOMing, at a small latency/seam-blending cost.
+    # (Confirmed via hasattr() against the actual installed diffusers,
+    # same as the slicing call — not guessed this time either.)
+    pipeline.vae.enable_tiling()
     return pipeline
 
 
