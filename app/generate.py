@@ -1,3 +1,4 @@
+import gc
 import logging
 import re
 import threading
@@ -42,10 +43,33 @@ def generate_image(prompt: str, conversation_id: str | None = None) -> str:
     prevents the idle-unload thread from freeing the pipeline mid-use."""
     global _pipeline, _last_used
     with _lock:
-        if _pipeline is None:
-            _pipeline = _load_pipeline()
-            logger.info("SDXL pipeline loaded")
-        image = _pipeline(prompt).images[0]
+        try:
+            if _pipeline is None:
+                _pipeline = _load_pipeline()
+                logger.info("SDXL pipeline loaded")
+            image = _pipeline(prompt).images[0]
+        except Exception:
+            # A crash mid-load or mid-forward-pass (e.g. CUDA OOM) leaves
+            # its local tensors referenced by the exception's own traceback
+            # frames until that traceback is garbage collected —
+            # torch.cuda.empty_cache() alone can't reclaim memory still
+            # referenced at the Python level. gc.collect() clears those
+            # references first; this is the standard fix for an OOM handler
+            # that doesn't actually free anything (confirmed live: after a
+            # crash here, nvidia-smi still showed the full pipeline
+            # resident even after an explicit /unload call). A failed load
+            # already leaves _pipeline as None (the assignment never
+            # completes); this reset matters for the case where a
+            # previously-loaded pipeline crashes mid-generation instead —
+            # conservative choice to force a fresh reload next time rather
+            # than reuse a pipeline that just failed for an unknown reason.
+            _pipeline = None
+            gc.collect()
+            try:
+                torch.cuda.empty_cache()
+            except Exception:
+                logger.exception("torch.cuda.empty_cache() failed after a failed generation")
+            raise
         _last_used = time.time()
 
     folder = conversation_id if conversation_id and _SAFE_FOLDER.match(conversation_id) else "unsorted"
