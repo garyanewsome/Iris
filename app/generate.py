@@ -40,7 +40,12 @@ def _load_pipeline():
     # full latent at once, cutting that step's peak memory substantially
     # at a small latency cost — the standard fix for exactly this failure
     # mode, not a broader accuracy/quality tradeoff.
-    pipeline.enable_vae_slicing()
+    # StableDiffusionXLPipeline doesn't expose the enable_vae_slicing()
+    # convenience wrapper in this diffusers version (0.40.0) despite
+    # inheriting StableDiffusionMixin — confirmed live via hasattr() against
+    # the actual installed version. The underlying method lives on the VAE
+    # component itself and always exists there regardless.
+    pipeline.vae.enable_slicing()
     return pipeline
 
 
